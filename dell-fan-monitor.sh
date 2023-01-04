@@ -154,7 +154,7 @@ while true; do
     #pinfo "$temp : $c_low : $c_high : $OLD_ST : $CUR_ST"
     if [ "$OLD_ST" != "$CUR_ST" ]; then
         new_speed="${speeds["${CUR_ST}.s"]}"
-        pinfo "Temperature is '$temp', changing speed to new state $CUR_ST [${new_speed}]'"
+        #pinfo "Temperature is '$temp', changing speed to new state $CUR_ST [${new_speed}]'"
         if [ "$CUR_ST" == "$max_state" ]; then
             pwarn "Temperature is hitting max state!"
         fi
