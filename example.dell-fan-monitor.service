@@ -3,7 +3,8 @@ Description=dell-fan-monitor
 
 [Service]
 User=root
-ExecStart=/usr/bin/nice -n -10 /bin/bash /opt/dell-fan-monitor/dell-fan-monitor.sh
+ExecStart=/opt/dell-fan-monitor/dell-fan-monitor.sh
+Nice=-10
 Restart=always
 RestartSec=5
 

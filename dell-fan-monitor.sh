@@ -67,7 +67,7 @@ read_config() {
 
         if [ "$INIT_SPD" == "$sp" ]; then
             CUR_ST=$total_speeds
-            pinfo "Found initial speed '$INIT_SPD' in state '$total_speeds'"
+#            pinfo "Found initial speed '$INIT_SPD' in state '$total_speeds'"
         fi
         
     done < <(cat "$CONFIG_FILE"; echo) # hack to had missing last new line
