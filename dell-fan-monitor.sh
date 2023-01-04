@@ -1,7 +1,7 @@
 #!/bin/bash
 
 TEMPERATURE_FILE=/sys/class/hwmon/hwmon1/temp1_input
-CONFIG_FILE=/opt/dell-fan-monitor/speeds.conf
+CONFIG_FILE=/etc/dell-fan-monitor.conf
 DELLFAN=/opt/dellfan/dellfan
 INIT_SPD=3
 
