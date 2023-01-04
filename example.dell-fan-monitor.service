@@ -1,0 +1,11 @@
+[Unit]
+Description=dell-fan-monitor
+
+[Service]
+User=root
+ExecStart=/usr/bin/nice -n -10 /bin/bash /opt/dell_fan_monitor/dell_fan_monitor.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
