@@ -3,12 +3,13 @@
 TEMPERATURE_FILE=/sys/class/hwmon/hwmon1/temp1_input
 CONFIG_FILE=/etc/dell-fan-monitor.conf
 DELLFAN=/opt/dellfan/dellfan
-INIT_SPD=3
+INIT_SPD=1
+EXIT_SPD=3
 
 # State variables
 declare -A speeds
 max_state=0
-CUR_ST=-1
+CUR_ST=0
 EXIT=0
 NUM_MASK="^[-]?[0-9]+$"
 : "${SLEEP_TIME:=3}"
@@ -41,7 +42,7 @@ trap_cleanup() {
     else
         pinfo "$out"
     fi
-    [ -x "$DELLFAN" ] && set_speed "$INIT_SPD"
+    [ -x "$DELLFAN" ] && set_speed "$EXIT_SPD"
     exit $1
 }
 
@@ -51,6 +52,7 @@ read_config() {
     speeds=()
     while IFS=' ' read -r sp low high; do
         ( [ "x$sp" == "x" ] || [ "x$low" == "x" ] || [ "x$high" == "x" ] ) && continue
+        [[ $sp =~ ^#.*$ ]] && continue
         if ! [[ $sp =~ $NUM_MASK ]] || ! [[ $low =~ $NUM_MASK ]] || ! [[ $high =~ $NUM_MASK ]]; then
             perror "Values '$sp', '$low' and '$high' must all be valid integers! Exiting..."
             exit 1
@@ -58,7 +60,7 @@ read_config() {
         low=$(($low * 1000))
         high=$(($high * 1000))
 
-        #pinfo "[$total_speeds] Adding '$sp' '$low' '$high'"
+#        pinfo "[$total_speeds] Adding '$sp' '$low' '$high'"
 
         speeds["${total_speeds}.s"]="$sp"
         speeds["${total_speeds}.l"]="$low"
@@ -151,10 +153,10 @@ while true; do
         fi
     fi
 
-    #pinfo "$temp : $c_low : $c_high : $OLD_ST : $CUR_ST"
+#    pinfo "$temp : $c_low : $c_high : $OLD_ST : $CUR_ST"
     if [ "$OLD_ST" != "$CUR_ST" ]; then
         new_speed="${speeds["${CUR_ST}.s"]}"
-        #pinfo "Temperature is '$temp', changing speed to new state $CUR_ST [${new_speed}]'"
+#        pinfo "Temperature is '$temp', changing speed to new state $CUR_ST [${new_speed}]'"
         if [ "$CUR_ST" == "$max_state" ]; then
             pwarn "Temperature is hitting max state!"
         fi
