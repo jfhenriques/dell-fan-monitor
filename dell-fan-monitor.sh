@@ -9,7 +9,7 @@ EXIT_SPD=3
 # State variables
 declare -A speeds
 max_state=0
-CUR_ST=0
+CUR_ST=-1
 EXIT=0
 NUM_MASK="^[-]?[0-9]+$"
 : "${SLEEP_TIME:=3}"
@@ -36,7 +36,7 @@ set_speed() {
 trap_cleanup() {
     [ "$EXIT" == "1" ] && return
     EXIT=1
-    out="Setting default fan speed ${INIT_SPD} and exiting..."
+    out="Setting default fan speed ${EXIT_SPD} and exiting..."
     if [[ "$1" -gt 0 ]]; then
         perror "Unexpected error occurred. $out"
     else
