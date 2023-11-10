@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TEMPERATURE_FILE=/sys/class/hwmon/hwmon1/temp1_input
+
 CONFIG_FILE=/etc/dell-fan-monitor.conf
 DELLFAN=/opt/dellfan/dellfan
 INIT_SPD=1
@@ -11,8 +11,14 @@ declare -A speeds
 max_state=0
 CUR_ST=-1
 EXIT=0
+last_speed_update=0
 NUM_MASK="^[-]?[0-9]+$"
 : "${SLEEP_TIME:=3}"
+DEVICE_NAME=
+TEMP_LABEL=
+TEMPERATURE_FILE=
+
+# Functions
 
 perror() {
     echo "[ERROR] ${@}" >&2
@@ -24,13 +30,16 @@ pinfo() {
     echo "[INFO] ${@}"
 }
 
-
 read_temp() {
     cat "$TEMPERATURE_FILE"
 }
 
+get_cur_date_secs() {
+    echo $(date +%s)
+}
+
 set_speed() {
-    eval "$DELLFAN" "$1" >/dev/null && CUR_SPD="$1"
+    eval "$DELLFAN" "$1" >/dev/null && CUR_SPD="$1" && last_speed_update=$(get_cur_date_secs)
 }
 
 trap_cleanup() {
@@ -46,31 +55,93 @@ trap_cleanup() {
     exit $1
 }
 
+find_temp_device() {
+    local d_name
+    local t_label
+
+    if [ "x$DEVICE_NAME" == x ] && [ "x$TEMP_LABEL" == x ]; then
+       DEVICE_NAME="coretemp"
+       TEMP_LABEL="Package id 0"
+    fi
+
+    for d in /sys/class/hwmon/hwmon*; do
+
+        [ -e "${d}/name" ] || continue
+        d_name="$(cat "${d}/name")"
+
+        [ "$d_name" == "$DEVICE_NAME" ] || continue
+
+        for t in ${d}/temp*_label; do
+            t_label="$(cat "$t")"
+
+            [ "$t_label" == "$TEMP_LABEL" ] || continue
+            TEMPERATURE_FILE=${t//_label/_input}
+
+            break
+
+        done
+
+        break
+    done
+}
+
 read_config() {
     total_speeds=0
     CUR_ST=-1
     speeds=()
+    seen=""
     while IFS=' ' read -r sp low high; do
-        ( [ "x$sp" == "x" ] || [ "x$low" == "x" ] || [ "x$high" == "x" ] ) && continue
+
+        # Ignore comments
         [[ $sp =~ ^#.*$ ]] && continue
-        if ! [[ $sp =~ $NUM_MASK ]] || ! [[ $low =~ $NUM_MASK ]] || ! [[ $high =~ $NUM_MASK ]]; then
-            perror "Values '$sp', '$low' and '$high' must all be valid integers! Exiting..."
-            exit 1
+
+        # Check sections
+        if [ "x$sp" != "x" ] && [ "x$low" == "x" ] && [ "x$high" == "x" ]; then
+          if [ "$sp" == "[GLOBAL]" ]; then
+            seen=g
+          elif [ "$sp" == "[SPEEDS]" ]; then
+            seen=s
+          else
+            perror "Section '$sp' not recognized. Ignoring..."
+          fi
+          continue
         fi
-        low=$(($low * 1000))
-        high=$(($high * 1000))
 
-#        pinfo "[$total_speeds] Adding '$sp' '$low' '$high'"
+        # Global configs
+        if [ "$seen" == "g" ]; then
+          if [ "x$sp" != "x" ] && [ "x$low" != "x" ]; then
+            if [ "$sp" == "DEVICE" ]; then
+                DEVICE_NAME=$(echo "$low $high"|xargs)
 
-        speeds["${total_speeds}.s"]="$sp"
-        speeds["${total_speeds}.l"]="$low"
-        speeds["${total_speeds}.h"]="$high"
-        total_speeds=$((total_speeds+1))
+            elif [ "$sp" == "LABEL" ]; then
+                TEMP_LABEL=$(echo "$low $high"|xargs)
 
-        if [ "$INIT_SPD" == "$sp" ]; then
-            CUR_ST=$total_speeds
-#            pinfo "Found initial speed '$INIT_SPD' in state '$total_speeds'"
-        fi
+            fi
+          fi
+
+        # Speeds
+        elif [ "$seen" == "s" ]; then
+
+          ( [ "x$sp" == "x" ] || [ "x$low" == "x" ] || [ "x$high" == "x" ] ) && continue
+          if ! [[ $sp =~ $NUM_MASK ]] || ! [[ $low =~ $NUM_MASK ]] || ! [[ $high =~ $NUM_MASK ]]; then
+              perror "Values '$sp', '$low' and '$high' must all be valid integers! Exiting..."
+              exit 1
+          fi
+          low=$(($low * 1000))
+          high=$(($high * 1000))
+
+          #pinfo "[$total_speeds] Adding '$sp' '$low' '$high'"
+
+          speeds["${total_speeds}.s"]="$sp"
+          speeds["${total_speeds}.l"]="$low"
+          speeds["${total_speeds}.h"]="$high"
+          total_speeds=$((total_speeds+1))
+
+          if [ "$INIT_SPD" == "$sp" ]; then
+              CUR_ST=$total_speeds
+#             pinfo "Found initial speed '$INIT_SPD' in state '$total_speeds'"
+          fi
+       fi
         
     done < <(cat "$CONFIG_FILE"; echo) # hack to had missing last new line
 
@@ -89,8 +160,8 @@ read_config() {
         pwarn "Defaulting initial speed to '$INIT_SPD'"        
     fi
     
+    find_temp_device
 }
-
 
 ################################################################
 # Startup checks
@@ -105,10 +176,6 @@ fi
 trap 'trap_cleanup 1' ERR
 trap 'trap_cleanup 0' EXIT
 
-if [ ! -e "$TEMPERATURE_FILE" ] ; then
-  perror "Check if temperature '$TEMPERATURE_FILE' sys file exists"
-  exit 1
-fi
 if [ ! -e "$CONFIG_FILE" ] ; then
   perror "Check if config '$CONFIG_FILE' file exists"
   exit 1
@@ -120,6 +187,10 @@ fi
 
 read_config
 
+if [ "x$TEMPERATURE_FILE" == x ] || [ ! -e "$TEMPERATURE_FILE" ] ; then
+  perror "Check if temperature file '$TEMPERATURE_FILE' exists"
+  exit 1
+fi
 
 ################################################################
 # Start looping
@@ -152,15 +223,20 @@ while true; do
             CUR_ST=$max_state
         fi
     fi
-
+    cur_secs=$(get_cur_date_secs)
+    elapsed=$((cur_secs-last_speed_update))
 #    pinfo "$temp : $c_low : $c_high : $OLD_ST : $CUR_ST"
     if [ "$OLD_ST" != "$CUR_ST" ]; then
         new_speed="${speeds["${CUR_ST}.s"]}"
-#        pinfo "Temperature is '$temp', changing speed to new state $CUR_ST [${new_speed}]'"
+        #pinfo "Temperature is '$temp', changing speed to new state $CUR_ST [${new_speed}]'"
         if [ "$CUR_ST" == "$max_state" ]; then
             pwarn "Temperature is hitting max state!"
         fi
         set_speed "$new_speed"
+
+    elif [[ $elapsed -ge 30 ]]; then
+        set_speed "$new_speed"
+
     fi
 
 done
