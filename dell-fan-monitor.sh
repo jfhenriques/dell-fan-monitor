@@ -1,7 +1,13 @@
 #!/bin/bash
 
+#
+#  !! ATTENTION !!
+#
+#  Follow instructions in readme.md
+#
 
-CONFIG_FILE=/etc/dell-fan-monitor.conf
+CONFIG_FILE_DEFAULT=/etc/dell-fan-monitor.conf
+CONFIG_FILE=""
 DELLFAN=/opt/dellfan/dellfan
 INIT_SPD=1
 EXIT_SPD=3
@@ -175,6 +181,12 @@ fi
 # trap any error and reset fan speed
 trap 'trap_cleanup 1' ERR
 trap 'trap_cleanup 0' EXIT
+
+if [ "x$1" != "x" ]; then
+    CONFIG_FILE="$1"
+else
+    CONFIG_FILE="$CONFIG_FILE_DEFAULT"
+fi
 
 if [ ! -e "$CONFIG_FILE" ] ; then
   perror "Check if config '$CONFIG_FILE' file exists"
